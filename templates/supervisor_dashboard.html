@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supervisor Dashboard - Research Scholar Management System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav>
+        <ul>
+            <li><a href="{{ url_for('home') }}">Home</a></li>
+            <li><a href="{{ url_for('profile') }}">Profile</a></li>
+            <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+            {% if 'email' in session %}
+                <li><a href="{{ url_for('logout') }}">Logout</a></li>
+            {% else %}
+                <li><a href="{{ url_for('login') }}">Login</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <ul class="flashes">
+        {% for category, message in messages %}
+        <li class="{{ category }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+
+    <!-- Dashboard Content -->
+    <h2>Supervisor Dashboard</h2>
+
+    <!-- Papers List -->
+    <h3>Submitted Papers</h3>
+    <ul>
+        {% for paper in papers %}
+            <li>
+                <strong>{{ paper.Title }} ({{ paper.Type }})</strong>
+                <p>Status: {{ paper.Status }}</p>
+                <p>Progress: {{ paper.Progress }}%</p>
+                <p>Remarks: {{ paper.Remarks }}</p>
+                <form action="{{ url_for('update_paper_status') }}" method="post">
+                    <input type="hidden" name="paper_id" value="{{ paper.Paper_ID }}">
+                    <label for="status_{{ paper.Paper_ID }}">Update Status:</label>
+                    <select id="status_{{ paper.Paper_ID }}" name="status">
+                        <option value="Pending" {% if paper.Status == 'Pending' %}selected{% endif %}>Pending</option>
+                        <option value="Approved" {% if paper.Status == 'Approved' %}selected{% endif %}>Approved</option>
+                        <option value="Rejected" {% if paper.Status == 'Rejected' %}selected{% endif %}>Rejected</option>
+                    </select>
+                    <br>
+                    <label for="remarks_{{ paper.Paper_ID }}">Remarks:</label>
+                    <textarea id="remarks_{{ paper.Paper_ID }}" name="remarks">{{ paper.Remarks }}</textarea>
+                    <br>
+                    <button type="submit">Update</button>
+                </form>
+            </li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

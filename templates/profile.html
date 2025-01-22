@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - Research Scholar Management System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav>
+        <ul>
+            <li><a href="{{ url_for('home') }}">Home</a></li>
+            <li><a href="{{ url_for('profile') }}">Profile</a></li>
+            <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+            {% if 'email' in session %}
+                <li><a href="{{ url_for('logout') }}">Logout</a></li>
+            {% else %}
+                <li><a href="{{ url_for('login') }}">Login</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <ul class="flashes">
+        {% for category, message in messages %}
+        <li class="{{ category }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+
+    <h2>Profile Page</h2>
+    {% if user_type == 'scholar' %}
+        <h3>Scholar Profile</h3>
+        <form action="{{ url_for('update_profile_scholar') }}" method="post" enctype="multipart/form-data">
+            <label for="first_name">First Name:</label>
+            <input type="text" id="first_name" name="first_name" value="{{ scholar.First_Name }}" required>
+            <br>
+            <label for="last_name">Last Name:</label>
+            <input type="text" id="last_name" name="last_name" value="{{ scholar.Last_Name }}" required>
+            <br>
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" value="{{ scholar.Email }}" required readonly>
+            <br>
+            <label for="phone">Phone Number:</label>
+            <input type="text" id="phone" name="phone" value="{{ scholar.Phone }}" required>
+            <br>
+            <label for="department">Department:</label>
+            <input type="text" id="department" name="department" value="{{ scholar.Department }}" required>
+            <br>
+            <label for="college">College:</label>
+            <input type="text" id="college" name="college" value="{{ scholar.College }}" required>
+            <br>
+            <label for="about">About:</label>
+            <textarea id="about" name="about">{{ scholar.About }}</textarea>
+            <br>
+            <label for="profile_pic">Upload/Change Profile Picture:</label>
+            <input type="file" id="profile_pic" name="profile_pic">
+            <br>
+            <label for="password">Update Password:</label>
+            <input type="password" id="password" name="password">
+            <br>
+            <button type="submit">Update Profile</button>
+        </form>
+        <h4>Uploaded Papers</h4>
+        <ul>
+            {% for paper in papers %}
+                <li>{{ paper.Title }} - {{ paper.Progress }}%</li>
+            {% endfor %}
+        </ul>
+    {% elif user_type == 'supervisor' %}
+        <h3>Supervisor Profile</h3>
+        <form action="{{ url_for('update_profile_supervisor') }}" method="post" enctype="multipart/form-data">
+            <label for="first_name">First Name:</label>
+            <input type="text" id="first_name" name="first_name" value="{{ supervisor.First_Name }}" required>
+            <br>
+            <label for="last_name">Last Name:</label>
+            <input type="text" id="last_name" name="last_name" value="{{ supervisor.Last_Name }}" required>
+            <br>
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" value="{{ supervisor.Email }}" required readonly>
+            <br>
+            <label for="phone">Phone Number:</label>
+            <input type="text" id="phone" name="phone" value="{{ supervisor.Phone }}" required>
+            <br>
+            <label for="department">Department:</label>
+            <input type="text" id="department" name="department" value="{{ supervisor.Department }}" required>
+            <br>
+            <label for="role">Role/Position:</label>
+            <input type="text" id="role" name="role" value="{{ supervisor.Role }}" required>
+            <br>
+            <label for="about">About:</label>
+            <textarea id="about" name="about">{{ supervisor.About }}</textarea>
+            <br>
+            <label for="profile_pic">Upload/Change Profile Picture:</label>
+            <input type="file" id="profile_pic" name="profile_pic">
+            <br>
+            <label for="password">Update Password:</label>
+            <input type="password" id="password" name="password">
+            <br>
+            <button type="submit">Update Profile</button>
+        </form>
+        <h4>Supervised Scholars</h4>
+        <ul>
+            {% for supervised_scholar in supervised_scholars %}
+                <li>{{ supervised_scholar.Name }} - {{ supervised_scholar.Email }}</li>
+            {% endfor %}
+        </ul>
+        <h4>Assign Scholar</h4>
+        <form action="{{ url_for('assign_supervisor') }}" method="post">
+            <input type="hidden" name="supervisor_id" value="{{ supervisor.Supervisor_ID }}">
+            <label for="scholar_id">Scholar:</label>
+            <select id="scholar_id" name="scholar_id">
+                {% for scholar in scholars %}
+                    <option value="{{ scholar.Scholar_ID }}">{{ scholar.Name }} (ID: {{ scholar.Scholar_ID }})</option>
+                {% endfor %}
+            </select>
+            <br>
+            <button type="submit">Assign</button>
+        </form>
+    {% endif %}
+</body>
+</html>

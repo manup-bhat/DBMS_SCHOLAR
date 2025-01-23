@@ -40,6 +40,7 @@
     <ul>
         {% for paper in papers %}
             <li>
+                <p>Scholar: <strong>{{ paper.Scholar_Name }}</strong></p>
                 <strong>{{ paper.Title }} ({{ paper.Type }})</strong>
                 <p>Status: {{ paper.Status }}</p>
                 <p>Progress: {{ paper.Progress }}%</p>

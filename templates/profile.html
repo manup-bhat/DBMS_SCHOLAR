@@ -35,7 +35,7 @@
     <h2>Profile Page</h2>
     {% if user_type == 'scholar' %}
         <h3>Scholar Profile</h3>
-        <form action="{{ url_for('update_profile_scholar') }}" method="post" enctype="multipart/form-data">
+        <form action="{{ url_for('update_profile_scholar') }}" method="post">
             <label for="first_name">First Name:</label>
             <input type="text" id="first_name" name="first_name" value="{{ scholar.First_Name }}" required>
             <br>
@@ -57,9 +57,6 @@
             <label for="about">About:</label>
             <textarea id="about" name="about">{{ scholar.About }}</textarea>
             <br>
-            <label for="profile_pic">Upload/Change Profile Picture:</label>
-            <input type="file" id="profile_pic" name="profile_pic">
-            <br>
             <label for="password">Update Password:</label>
             <input type="password" id="password" name="password">
             <br>
@@ -73,7 +70,7 @@
         </ul>
     {% elif user_type == 'supervisor' %}
         <h3>Supervisor Profile</h3>
-        <form action="{{ url_for('update_profile_supervisor') }}" method="post" enctype="multipart/form-data">
+        <form action="{{ url_for('update_profile_supervisor') }}" method="post">
             <label for="first_name">First Name:</label>
             <input type="text" id="first_name" name="first_name" value="{{ supervisor.First_Name }}" required>
             <br>
@@ -94,9 +91,6 @@
             <br>
             <label for="about">About:</label>
             <textarea id="about" name="about">{{ supervisor.About }}</textarea>
-            <br>
-            <label for="profile_pic">Upload/Change Profile Picture:</label>
-            <input type="file" id="profile_pic" name="profile_pic">
             <br>
             <label for="password">Update Password:</label>
             <input type="password" id="password" name="password">

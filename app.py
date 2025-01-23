@@ -2,9 +2,14 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 import sqlite3
 import bcrypt
 import os
+import logging
 
+# Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+
+# Setup logging
+logging.basicConfig(level=logging.DEBUG)
 
 DATABASE = 'instance/database.db'
 
@@ -25,7 +30,7 @@ def create_db():
     os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
     if os.path.exists(DATABASE):
         os.remove(DATABASE)
-        
+
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
 
@@ -72,7 +77,8 @@ def create_db():
             Scholar_ID INTEGER,
             Remarks TEXT,
             Created_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (Scholar_ID) REFERENCES Scholar(Scholar_ID) ON DELETE CASCADE
+            FOREIGN KEY (Scholar_ID) REFERENCES Scholar(Scholar_ID) ON DELETE CASCADE,
+            UNIQUE(Title, Scholar_ID)
         )
     """)
 
@@ -82,7 +88,8 @@ def create_db():
             Supervisor_ID INTEGER,
             Scholar_ID INTEGER,
             FOREIGN KEY (Supervisor_ID) REFERENCES Supervisor(Supervisor_ID) ON DELETE CASCADE,
-            FOREIGN KEY (Scholar_ID) REFERENCES Scholar(Scholar_ID) ON DELETE CASCADE
+            FOREIGN KEY (Scholar_ID) REFERENCES Scholar(Scholar_ID) ON DELETE CASCADE,
+            UNIQUE(Supervisor_ID, Scholar_ID)
         )
     """)
 
@@ -217,10 +224,12 @@ def supervisor_dashboard():
     supervisor_id = cursor.fetchone()['Supervisor_ID']
 
     query = """
-        SELECT Paper.Paper_ID, Paper.Title, Paper.Type, Paper.Status, Paper.Progress, Paper.Remarks
+        SELECT Paper.Paper_ID, Paper.Title, Paper.Type, Paper.Status, Paper.Progress, Paper.Remarks,
+               User.First_Name || ' ' || User.Last_Name as Scholar_Name
         FROM Paper
         JOIN Scholar ON Paper.Scholar_ID = Scholar.Scholar_ID
         JOIN Supervisor_Scholar ON Scholar.Scholar_ID = Supervisor_Scholar.Scholar_ID
+        JOIN User ON Scholar.User_ID = User.User_ID
         WHERE Supervisor_Scholar.Supervisor_ID = ?
     """
     params = [supervisor_id]
@@ -229,10 +238,10 @@ def supervisor_dashboard():
         search = request.args.get('search')
         status = request.args.get('status')
         if search:
-            query += " AND Title LIKE ?"
+            query += " AND Paper.Title LIKE ?"
             params.append(f"%{search}%")
         if status:
-            query += " AND Status=?"
+            query += " AND Paper.Status=?"
             params.append(status)
 
     cursor.execute(query, params)
@@ -330,6 +339,8 @@ def signup_supervisor():
         phone = request.form['phone']
         role = request.form['role']
 
+        print("Form Data:", email, first_name, last_name, department, about, phone, role)
+
         hashed_password = bcrypt.hashpw(password, bcrypt.gensalt())
 
         conn = get_db()
@@ -350,7 +361,8 @@ def signup_supervisor():
             conn.commit()
             flash('Registration successful!', 'success')
             return redirect(url_for('login'))
-        except sqlite3.IntegrityError:
+        except sqlite3.IntegrityError as e:
+            print("IntegrityError:", e)
             flash('Email already exists', 'danger')
         finally:
             conn.close()
@@ -372,17 +384,58 @@ def add_paper():
     cursor = conn.cursor()
 
     cursor.execute("SELECT Scholar_ID FROM User JOIN Scholar ON User.User_ID = Scholar.User_ID WHERE User.Email=?", (email,))
-    scholar_id = cursor.fetchone()['Scholar_ID']
+    scholar = cursor.fetchone()
+    if scholar:
+        scholar_id = scholar['Scholar_ID']
+        print(f"Scholar ID: {scholar_id}")
+    else:
+        flash('Scholar not found.', 'danger')
+        return redirect(url_for('scholar_dashboard'))
+
+    # Check if a paper with the same title already exists for the scholar
+    cursor.execute("SELECT * FROM Paper WHERE Title=? AND Scholar_ID=?", (title, scholar_id))
+    existing_paper = cursor.fetchone()
+
+    if existing_paper:
+        flash('Paper with the same title already exists for this scholar.', 'danger')
+        print("Duplicate paper found.")
+    else:
+        try:
+            cursor.execute("""
+                INSERT INTO Paper (Title, Type, Progress, Scholar_ID)
+                VALUES (?, ?, ?, ?)
+            """, (title, paper_type, progress, scholar_id))
+            conn.commit()
+            flash('Paper added successfully!', 'success')
+            print("Paper added successfully.")
+        except sqlite3.IntegrityError as e:
+            print("IntegrityError:", e)
+            flash('An error occurred while adding the paper.', 'danger')
+        finally:
+            conn.close()
+
+    return redirect(url_for('scholar_dashboard'))
+
+@app.route('/update_paper_progress', methods=['POST'])
+def update_paper_progress():
+    if 'email' not in session:
+        flash('Please log in to access this page.', 'danger')
+        return redirect(url_for('login'))
+
+    paper_id = request.form['paper_id']
+    progress = request.form['progress']
+
+    conn = get_db()
+    cursor = conn.cursor()
 
     cursor.execute("""
-        INSERT INTO Paper (Title, Type, Progress, Scholar_ID)
-        VALUES (?, ?, ?, ?)
-    """, (title, paper_type, progress, scholar_id))
+        UPDATE Paper SET Progress=? WHERE Paper_ID=?
+    """, (progress, paper_id))
 
     conn.commit()
     conn.close()
 
-    flash('Paper added successfully!', 'success')
+    flash('Paper progress updated successfully!', 'success')
     return redirect(url_for('scholar_dashboard'))
 
 @app.route('/update_profile_scholar', methods=['POST'])
@@ -467,6 +520,7 @@ def update_profile_supervisor():
     flash('Profile updated successfully!', 'success')
     return redirect(url_for('profile'))
 
+
 @app.route('/update_paper_status', methods=['POST'])
 def update_paper_status():
     if 'email' not in session:
@@ -502,15 +556,18 @@ def assign_supervisor():
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("""
-        INSERT INTO Supervisor_Scholar (Supervisor_ID, Scholar_ID)
-        VALUES (?, ?)
-    """, (supervisor_id, scholar_id))
+    try:
+        cursor.execute("""
+            INSERT INTO Supervisor_Scholar (Supervisor_ID, Scholar_ID)
+            VALUES (?, ?)
+        """, (supervisor_id, scholar_id))
+        conn.commit()
+        flash('Scholar assigned to supervisor successfully!', 'success')
+    except sqlite3.IntegrityError:
+        flash('Scholar is already assigned to this supervisor.', 'danger')
+    finally:
+        conn.close()
 
-    conn.commit()
-    conn.close()
-
-    flash('Scholar assigned to supervisor successfully!', 'success')
     return redirect(url_for('profile'))
 
 if __name__ == '__main__':

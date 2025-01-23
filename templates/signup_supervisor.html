@@ -8,6 +8,18 @@
 </head>
 <body>
     <h2>Sign Up as Supervisor</h2>
+    
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <ul class="flashes">
+        {% for category, message in messages %}
+        <li class="{{ category }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+    
     <form action="{{ url_for('signup_supervisor') }}" method="post">
         <label for="first_name">First Name:</label>
         <input type="text" id="first_name" name="first_name" required>

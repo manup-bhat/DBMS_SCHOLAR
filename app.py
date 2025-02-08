@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, g
+from flask_mail import Mail, Message
 import sqlite3
 import bcrypt
 import os
@@ -7,6 +8,15 @@ import logging
 # Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+
+# Email configuration
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = ''
+app.config['MAIL_PASSWORD'] = ''
+
+mail = Mail(app)
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
@@ -27,74 +37,86 @@ def close_db(exception):
 
 # Database Schema Creation
 def create_db():
-    os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
-    if os.path.exists(DATABASE):
-        os.remove(DATABASE)
+    if not os.path.exists(DATABASE):
+        os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
 
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS User (
+                User_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                Email TEXT NOT NULL UNIQUE,
+                Password TEXT NOT NULL,
+                User_Type TEXT NOT NULL CHECK(User_Type IN ('scholar', 'supervisor')),
+                First_Name TEXT NOT NULL,
+                Last_Name TEXT NOT NULL,
+                Department TEXT,
+                About TEXT,
+                Phone TEXT,
+                Created_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS User (
-            User_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-            Email TEXT NOT NULL UNIQUE,
-            Password TEXT NOT NULL,
-            User_Type TEXT NOT NULL CHECK(User_Type IN ('scholar', 'supervisor')),
-            First_Name TEXT NOT NULL,
-            Last_Name TEXT NOT NULL,
-            Department TEXT,
-            About TEXT,
-            Phone TEXT,
-            Created_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Scholar (
+                Scholar_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                User_ID INTEGER,
+                College TEXT,
+                FOREIGN KEY (User_ID) REFERENCES User(User_ID) ON DELETE CASCADE
+            )
+        """)
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Scholar (
-            Scholar_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-            User_ID INTEGER,
-            College TEXT,
-            FOREIGN KEY (User_ID) REFERENCES User(User_ID) ON DELETE CASCADE
-        )
-    """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Supervisor (
+                Supervisor_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                User_ID INTEGER,
+                Role TEXT,
+                FOREIGN KEY (User_ID) REFERENCES User(User_ID) ON DELETE CASCADE
+            )
+        """)
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Supervisor (
-            Supervisor_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-            User_ID INTEGER,
-            Role TEXT,
-            FOREIGN KEY (User_ID) REFERENCES User(User_ID) ON DELETE CASCADE
-        )
-    """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Paper (
+                Paper_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                Title TEXT NOT NULL,
+                Type TEXT NOT NULL CHECK(Type IN ('journal', 'conference')),
+                Status TEXT DEFAULT 'Pending' CHECK(Status IN ('Pending', 'Approved', 'Rejected')),
+                Progress INTEGER NOT NULL,
+                Scholar_ID INTEGER,
+                Remarks TEXT,
+                Created_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (Scholar_ID) REFERENCES Scholar(Scholar_ID) ON DELETE CASCADE,
+                UNIQUE(Title, Scholar_ID)
+            )
+        """)
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Paper (
-            Paper_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-            Title TEXT NOT NULL,
-            Type TEXT NOT NULL CHECK(Type IN ('journal', 'conference')),
-            Status TEXT DEFAULT 'Pending' CHECK(Status IN ('Pending', 'Approved', 'Rejected')),
-            Progress INTEGER NOT NULL,
-            Scholar_ID INTEGER,
-            Remarks TEXT,
-            Created_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (Scholar_ID) REFERENCES Scholar(Scholar_ID) ON DELETE CASCADE,
-            UNIQUE(Title, Scholar_ID)
-        )
-    """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Supervisor_Scholar (
+                ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                Supervisor_ID INTEGER,
+                Scholar_ID INTEGER,
+                FOREIGN KEY (Supervisor_ID) REFERENCES Supervisor(Supervisor_ID) ON DELETE CASCADE,
+                FOREIGN KEY (Scholar_ID) REFERENCES Scholar(Scholar_ID) ON DELETE CASCADE,
+                UNIQUE(Supervisor_ID, Scholar_ID)
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS meetings (
+                meeting_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                supervisor_id INTEGER,
+                scholar_id INTEGER,
+                meeting_time TEXT,
+                description TEXT,
+                FOREIGN KEY (supervisor_id) REFERENCES Supervisor(Supervisor_ID) ON DELETE CASCADE,
+                FOREIGN KEY (scholar_id) REFERENCES Scholar(Scholar_ID) ON DELETE CASCADE
+            )
+        """)
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Supervisor_Scholar (
-            ID INTEGER PRIMARY KEY AUTOINCREMENT,
-            Supervisor_ID INTEGER,
-            Scholar_ID INTEGER,
-            FOREIGN KEY (Supervisor_ID) REFERENCES Supervisor(Supervisor_ID) ON DELETE CASCADE,
-            FOREIGN KEY (Scholar_ID) REFERENCES Scholar(Scholar_ID) ON DELETE CASCADE,
-            UNIQUE(Supervisor_ID, Scholar_ID)
-        )
-    """)
+        conn.commit()
+        conn.close()
 
-    conn.commit()
-    conn.close()
+#create_db()
 
 @app.route('/')
 @app.route('/home')
@@ -570,6 +592,60 @@ def assign_supervisor():
 
     return redirect(url_for('profile'))
 
+@app.route('/schedule_meeting', methods=['GET', 'POST'])
+def schedule_meeting():
+    if 'email' not in session:
+        flash('Please log in to access this page.', 'danger')
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        supervisor_id = request.form['supervisor_id']
+        scholar_ids = request.form.getlist('scholar_ids')  # Get list of selected scholar IDs
+        meeting_time = request.form['meeting_time']
+        description = request.form['description']
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        for scholar_id in scholar_ids:
+            cursor.execute("""
+                INSERT INTO meetings (supervisor_id, scholar_id, meeting_time, description)
+                VALUES (?, ?, ?, ?)
+            """, (supervisor_id, scholar_id, meeting_time, description))
+        
+        conn.commit()
+
+        flash('Meeting scheduled successfully!', 'success')
+
+        # Send email reminder to each selected scholar
+        cursor.execute("SELECT Email FROM User WHERE User_ID = ?", (supervisor_id,))
+        supervisor_email = cursor.fetchone()['Email']
+
+        for scholar_id in scholar_ids:
+            cursor.execute("SELECT Email FROM User WHERE User_ID = ?", (scholar_id,))
+            scholar_email = cursor.fetchone()['Email']
+
+            subject = "Meeting Scheduled"
+            body = f"A meeting has been scheduled on {meeting_time}.\n\nDescription:\n{description}"
+
+            msg = Message(subject, sender='your_email@gmail.com', recipients=[scholar_email, supervisor_email])
+            msg.body = body
+            mail.send(msg)
+
+        conn.close()
+        return redirect(url_for('dashboard'))
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT User.User_ID, User.First_Name, User.Last_Name FROM User JOIN Supervisor ON User.User_ID = Supervisor.User_ID")
+    supervisors = cursor.fetchall()
+    cursor.execute("SELECT User.User_ID, User.First_Name, User.Last_Name FROM User JOIN Scholar ON User.User_ID = Scholar.User_ID")
+    scholars = cursor.fetchall()
+    conn.close()
+
+    return render_template('schedule_meeting.html', supervisors=supervisors, scholars=scholars)
+
 if __name__ == '__main__':
     create_db()
     app.run(debug=True)
+    
